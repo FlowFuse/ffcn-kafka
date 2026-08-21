@@ -1,4 +1,4 @@
-# [node-red-contrib-kafka-manager][2]
+# @flowfuse-certified-nodes/ffcn-kafka
 [Node Red][1] for working with apache kafka, a streaming product.
 First initial release using [kafka-node][4] .
 
@@ -140,14 +140,16 @@ Test/example flow in test/generalTest.json
 
 # Version
 
+1.0.0 Forked for FlowFuse Certified Nodes
+
 0.6.1 Major change in compression and add deadletter q
 
 0.5.0 add consumer wildcard topics + topics / to . along with fix on to/from/json
 
 
-# Author
+# Origin
 
-[Peter Prib][3]
+Forked from the [`node-red-contrib-kafka-manager`][2] node written by [Peter Prib][3]
 
 [1]: http://nodered.org "node-red home page"
 
