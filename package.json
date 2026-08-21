@@ -1,12 +1,15 @@
 {
-  "name": "node-red-contrib-kafka-manager",
-  "version": "0.7.0",
+  "name": "@flowfuse-certified-nodes/ffcn-kafka",
+  "version": "1.0.0",
+  "homepage": "https://flowfuse.com/node-red/flowfuse/hub/kafka/",
+  "publishConfig": {
+    "registry": "https://registry.flowfuse.com"
+  },
   "description": "Node-RED implements Kafka manager with associand associated .",
   "dependencies": {
-    "compressiontool": "*",
-    "kafka-node": "*",
+    "compressiontool": "^0.1.3",
+    "kafka-node": "^5.0.0",
     "node": ">=0.6.13",
-    "node-red-contrib-kafka-manager": "file:",
     "node-red-contrib-logger": ">=0.0.8",
     "node-red-contrib-noderedbase": ">=0.0.16"
   },
@@ -17,16 +20,13 @@
     "bcrypt": ">=5.0.0",
     "bl": ">=2.2.1",
     "mocha": "^9.2.0",
-    "node-red": "^3.0.2",
+    "node-red": "^5.0.4",
     "node-red-node-test-helper": "*",
-    "zlib": "*"
+    "zlib": "^1.0.5"
   },
   "scripts": {
-    "test": "mocha --exit \"test/*.js\"",
-    "testState": "mocha --exit \"test/t01s*.js\"",
-    "testProcessStack": "mocha --exit \"test/t00p*.js\"",
-    "startNodeRed": "node-red --userDir ./.temp --title '***test***' --setting ./test/data/settings.js ./test/data/flow.json",
-    "update": "npm update"
+    "test": "mocha --exit \"test/t01*.js\"",
+    "startNodeRed": "node-red --userDir ./.temp --title '***test***' --setting ./test/data/settings.js ./test/data/flow.json"
   },
   "repository": {
     "type": "git",
@@ -62,7 +62,6 @@
   "author": "Peter Prib",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/peterprib/node-red-contrib-kafka-manager/issues"
-  },
-  "homepage": "https://github.com/peterprib/node-red-contrib-kafka-manager#readme"
+    "url": "https://github.com/flowFuse/ffcn-kafka/issues"
+  }
 }
