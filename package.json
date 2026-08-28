@@ -60,6 +60,9 @@
     }
   },
   "author": "Peter Prib",
+  "contributors": [
+    { "name": "FlowFuse Inc.", "url": "https://flowfuse.com" }
+  ],
   "license": "GPL-3.0",
   "bugs": {
     "url": "https://github.com/flowFuse/ffcn-kafka/issues"
