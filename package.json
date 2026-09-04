@@ -19,7 +19,7 @@
   "devDependencies": {
     "bcrypt": ">=5.0.0",
     "bl": ">=2.2.1",
-    "mocha": "^9.2.0",
+    "mocha": "^12.0.0",
     "node-red": "^5.0.4",
     "node-red-node-test-helper": "~0.3.6",
     "zlib": "^1.0.5"
