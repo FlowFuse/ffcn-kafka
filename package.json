@@ -5,7 +5,7 @@
   "publishConfig": {
     "registry": "https://registry.flowfuse.com"
   },
-  "description": "Node-RED implements Kafka manager with associand associated .",
+  "description": "Apache Kafka client for Node-RED: produce, consume, and manage topics.",
   "dependencies": {
     "compressiontool": "^0.1.3",
     "kafka-node": "^5.0.0",
