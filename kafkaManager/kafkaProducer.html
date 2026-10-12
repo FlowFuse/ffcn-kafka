@@ -63,8 +63,8 @@
         <input type="hidden" id="node-input-key-type">
     </div>
     <div class="form-row">
-        <label for="node-input-payload"><i class="fa fa-tag"></i> Key </label>
-        <input type="text" id="node-input-payload" placeholder="key">
+        <label for="node-input-payload"><i class="fa fa-tag"></i> Payload </label>
+        <input type="text" id="node-input-payload" placeholder="Payload">
         <input type="hidden" id="node-input-payload-type">
     </div>
     <div class="form-row">
@@ -142,7 +142,8 @@ function json2html(obj){
             requireAcks: {value:1,required:true},
             ackTimeoutMs: {value:100,required:true},
             partitionerType: {value:0,required:true},
-            key: {required:false},"keyType":{required:false,default:"str"},
+            key: {required:false},
+            "keyType":{required:false,default:"str"},
             partition: {value:0,required:true},
             payload: {value:"payload", validate: RED.validators.typedInput("payloadType")},
             payloadType: {value:"msg"},
