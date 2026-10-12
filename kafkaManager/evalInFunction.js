@@ -15,7 +15,7 @@ function evalInFunction (node, propertyName) {
     const propertyType = propertyName + '-type'
     switch (node[propertyType]) {
       case 'str':
-        return evalFunction(propertyName, '()=>' + JSON.stringify(node.property))
+        return evalFunction(propertyName, '()=>' + JSON.stringify(property))
       case 'num':
       case 'json':
         return evalFunction(propertyName, '()=>' + property)
