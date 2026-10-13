@@ -241,6 +241,7 @@ module.exports = function (RED) {
       })
       node._base=new noderedBase(RED,node);
       this._base.setSource("payload")
+      node['key-type'] = n.keyType
 
       node.brokerNode = RED.nodes.getNode(this.broker)
       if (!node.brokerNode) throw Error('Broker not found ' + node.broker)

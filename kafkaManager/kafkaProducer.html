@@ -60,12 +60,12 @@
     <div class="form-row">
         <label for="node-input-key"><i class="fa fa-tag"></i> Key </label>
         <input type="text" id="node-input-key" placeholder="key">
-        <input type="hidden" id="node-input-key-type">
+        <input type="hidden" id="node-input-keyType">
     </div>
     <div class="form-row">
         <label for="node-input-payload"><i class="fa fa-tag"></i> Payload </label>
         <input type="text" id="node-input-payload" placeholder="Payload">
-        <input type="hidden" id="node-input-payload-type">
+        <input type="hidden" id="node-input-payloadType">
     </div>
     <div class="form-row">
         <label for="node-input-partition"><i class="fa fa-tag"></i> Partition </label>
@@ -143,7 +143,7 @@ function json2html(obj){
             ackTimeoutMs: {value:100,required:true},
             partitionerType: {value:0,required:true},
             key: {required:false},
-            "keyType":{required:false,default:"str"},
+            keyType:{required:false,default:"str"},
             partition: {value:0,required:true},
             payload: {value:"payload", validate: RED.validators.typedInput("payloadType")},
             payloadType: {value:"msg"},
@@ -169,16 +169,17 @@ function json2html(obj){
             $("#node-input-payloadType").val(this.payloadType||"msg");
             $("#node-input-payload").typedInput({
                 type:"msg",
-                types:["msg", "flow","global","env","str"],
+                types:["msg","env","str"],
                 typeField: "#node-input-payloadType"
             });
             $("#node-input-msgOveride").typedInput({type:'bool',types:['bool']});
             $("#node-input-msgTopicOveride").typedInput({type:'bool',types:['bool']});
         	if(!this.connectionType) this.connectionType="Producer";
             if(!this.nodeQSize) $("#node-input-nodeQSize").val(1000);
+            $("#node-input-keyType").val(this.keyType||"str");
             $("#node-input-key").typedInput({
                 type:"str",
-                types:["str","msg", "flow","global","env"],
+                types:["str","msg","env"],
                 typeField: "#node-input-keyType"
             })
             if(node.compressionType==null ){
