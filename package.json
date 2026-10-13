@@ -1,6 +1,6 @@
 {
   "name": "@flowfuse-certified-nodes/ffcn-kafka",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "homepage": "https://flowfuse.com/node-red/flowfuse/hub/kafka/",
   "publishConfig": {
     "registry": "https://registry.flowfuse.com"

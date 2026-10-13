@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.3](https://github.com/FlowFuse/ffcn-kafka/compare/v1.0.2...v1.0.3) (2026-10-13)
+
+
+### Bug Fixes
+
+* Add note about no zookeeper v4 ([#60](https://github.com/FlowFuse/ffcn-kafka/issues/60)) ([a97b508](https://github.com/FlowFuse/ffcn-kafka/commit/a97b50868782bffd263d4cdbb99a356944647308))
+* Fix pulling key from msg ([#61](https://github.com/FlowFuse/ffcn-kafka/issues/61)) ([ce0e1d4](https://github.com/FlowFuse/ffcn-kafka/commit/ce0e1d4b53be65ffa14b83c848e6fefe3e025be7))
+
 ## [1.0.2](https://github.com/FlowFuse/ffcn-kafka/compare/v1.0.1...v1.0.2) (2026-10-12)
 
 
