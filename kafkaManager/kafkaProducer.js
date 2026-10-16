@@ -10,6 +10,7 @@ const zlib = require('node:zlib')
 const compressionTool = require('compressiontool')
 const noderedBase=require("node-red-contrib-noderedbase");
 const murmur2Partitioner = require('./murmur2Partitioner.js')
+const KafkajsProducer = require('./kafkajsProducer.js')
 
 const isTrue = (value) => value === true || value === 'true'
 
@@ -219,6 +220,15 @@ function processMessageCompression (msg, msgData, _this = this) {
   )
 }
 
+function createProducer (node, client) {
+  if (KafkajsProducer.brokerNeedsKafkajs(client)) return new KafkajsProducer(client, node.options)
+  const KafkaProducer = node.brokerNode.getKafkaDriver()[node.connectionType || 'Producer']
+  if (node.options.partitionerType === 3) {
+    return new KafkaProducer(client, { ...node.options, partitionerType: 4 }, murmur2Partitioner)
+  }
+  return new KafkaProducer(client, node.options)
+}
+
 module.exports = function (RED) {
   function KafkaProducerNode (n) {
     RED.nodes.createNode(this, n)
@@ -308,10 +318,7 @@ module.exports = function (RED) {
         }).setUpAction(next => {
           logger.active&&logger.info({ label: 'upAction', node: node.id, name: node.name })
           node.status({ fill: 'yellow', shape: 'ring', text: 'connecting' })
-          const kafka = node.brokerNode.getKafkaDriver()
-          node.producer = node.options.partitionerType === 3
-            ? new kafka[(node.connectionType || 'Producer')](client.connection, { ...node.options, partitionerType: 4 }, murmur2Partitioner)
-            : new kafka[(node.connectionType || 'Producer')](client.connection, node.options)
+          node.producer = createProducer(node, client.connection)
           node.producer.on('error', function (ex) {
             const errMsg = node.brokerNode.getRevisedMessage(ex.message)
             logger.error({ label: 'producer.on.error', node: node.id, name: node.name, error: ex.message, errorEnhanced: errMsg })
