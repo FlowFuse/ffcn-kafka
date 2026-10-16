@@ -7,6 +7,17 @@ const showOn = (done,message = 'onUp', finalDone) => {
   finalDone && finalDone()
   done()
 }
+// onDown handlers run once when registered while the state is down; skip that call
+const afterRegistration = (callFunction) => {
+  let registered = false
+  return (next, ...args) => {
+    if (!registered) {
+      registered = true
+      return next()
+    }
+    callFunction(next, ...args)
+  }
+}
 
 describe('state', function () {
   it('initial', function (done) {
@@ -47,12 +58,16 @@ describe('state', function () {
     const state = new State()
     state.up().isNotAvailable(() => done('wrong state Up'), done)
   })
+  it('onDown runs on registration while down', function (done) {
+    const state = new State()
+    state.onDown((next) => { next(); done() })
+  })
   it('up', function (done) {
     const state = new State()
     state.onUp(showOn.bind(this), 'onUp')
-      .onDown((next) =>{
+      .onDown(afterRegistration((next) =>{
          done('onDown should not be called')
-      })
+      }))
       .up(()=>{
         console.log("up called")
         done()
@@ -69,16 +84,16 @@ describe('state', function () {
   it('onUp', function (done) {
     const state = new State()
     state.onUp(showOn.bind(this), 'onUp',done)
-      .onDown((next) => {
+      .onDown(afterRegistration((next) => {
         done('onDown should not be called')
         next();
-      })
+      }))
       .setUp()
   })
   it('onDown', function (done) {
     const state = new State()
       .onUp(showOn.bind(this),'onUp ok')
-      .onDown(showOn.bind(this),'onDown ok', done)
+      .onDown(afterRegistration(showOn.bind(this)),'onDown ok', done)
       .setUp()
     state.setDown()
   })
@@ -88,7 +103,7 @@ describe('state', function () {
     state.setUpAction((done) => { test = true; done() })
       .onUp(showOn.bind(this), 'onUp ok')
       .onUp((next) => { if (test) done(); else done('call action no completed') ; next()})
-      .onDown((next) =>{ done('onDown should not be called'); next() })
+      .onDown(afterRegistration((next) =>{ done('onDown should not be called'); next() }))
       .setUp()
   })
   it('upAction error', function (done) {
@@ -102,7 +117,7 @@ describe('state', function () {
       })
     })
       .onUp(showOn.bind(this), 'onUp ok')
-      .onDown((next) =>{ done('onDown should not be called'); next() })
+      .onDown(afterRegistration((next) =>{ done('onDown should not be called'); next() }))
       .setUp()
   })
   it('downAction', function (done) {
@@ -111,11 +126,11 @@ describe('state', function () {
     state.setUpAction((next) => { test += 'setUpAction'; next() })
     state.setDownAction((next) => { test += ',setDownAction'; next() })
       .onUp((next) => { test += ',onUp'; next() })
-      .onDown((next) => { 
+      .onDown(afterRegistration((next) => { 
         if (test === 'setUpAction,onUp,setDownAction') done()
         else done('call action no completed') 
         next()
-      })
+      }))
       .setUp()
     state.setDown()
   })
@@ -128,7 +143,7 @@ describe('state', function () {
       .onDown((next) => { test += ',onDown'; next() })
       .whenUp(() => { test += ',whenUp'})
       .whenUp(() => {
-        if (test === ',setUpAction,onUp,whenUp') done()
+        if (test === ',onDown,setUpAction,onUp,whenUp') done()
         else done('test is ' + test) 
       })
       .setUp()
@@ -136,7 +151,7 @@ describe('state', function () {
   it('whenDown', function (done) {
     const state = new State()
     let test = ''
-    const result=',setUpAction,onUp,whenUp,whenUp1,whenUp2,setDownAction,onDown'
+    const result=',onDown,setUpAction,onUp,whenUp,whenUp1,whenUp2,setDownAction,onDown'
     state.setUpAction((next) => { test += ',setUpAction'; next() })
     state
       .setDownAction((next) => { test += ',setDownAction'; next() })
@@ -158,7 +173,7 @@ describe('state', function () {
   it('setUp(done)', function (done) {
     const state = new State()
     let test = ''
-    const result=',setUpAction,onUp'
+    const result=',onDown,setUpAction,onUp'
     state.setUpAction((next) => { test += ',setUpAction'; next() })
     state.setDownAction((next) => { test += ',setDownAction'; next() })
       .onUp((next) => { test += ',onUp'; next() })
@@ -172,7 +187,7 @@ describe('state', function () {
   it('setDown(done)', function (done) {
     const state = new State()
     let test = ''
-    const expecting = ',setUpAction,onUp,whenUp,whenUp1,setDownAction,onDown'
+    const expecting = ',onDown,setUpAction,onUp,whenUp,whenUp1,setDownAction,onDown'
     state.setUpAction((next) => { test += ',setUpAction'; console.log(test); next() })
     state.setDownAction((next) => { test += ',setDownAction';  console.log(test); next() })
       .onUp((next) => { test += ',onUp' ;  console.log(test); next() })
@@ -207,7 +222,7 @@ describe('state', function () {
     }).setDownAction((next) => { test += ',setDownAction'; next() })
       .onUp((next) => { test += ',onUp' ; next()})
       .onDown((next) => { test += ',onDown' ; next()})
-      .whenUp(() => { if (test === ',setCheck,setCheck,setUpAction,onUp') done(); else done('test is ' + test)})
+      .whenUp(() => { if (test === ',onDown,setCheck,setCheck,setUpAction,onUp') done(); else done('test is ' + test)})
       .setCheck((onUp, onDown) => {
         if (++checkCount > 2) return onUp()
         test += ',setCheck'
@@ -267,7 +282,7 @@ describe('state', function () {
   it('beforeDown', function (done) {
     const state = new State()
     let sequence = ''
-    const expectedSequence = ',setUp,whenUp,beforeDown1,beforeDown2,beforeDown3,downAction,downActionTimeout,onDown1,setDown,whenDown'
+    const expectedSequence = ',onDown1,setUp,whenUp,beforeDown1,beforeDown2,beforeDown3,downAction,downActionTimeout,onDown1,setDown,whenDown'
     state
       .onDown((next) => { sequence += ',onDown1' ; console.log(sequence); next()})
       .beforeDown((next) => { sequence += ',beforeDown1'; console.log(sequence); next() })
@@ -325,7 +340,7 @@ describe('state', function () {
   })
   it('on Idle 200', function (done) {
     let sequence = ''
-    const expectedSequence = ',upAction,onUp,whenup1,beforeDown1,downAction,onDown,whenDown,onIdle,setTimeout,upAction,onUp,whenup2,beforeDown1,downAction,onDown,onIdle,whenDownTimeout'
+    const expectedSequence = ',onDown,upAction,onUp,whenup1,beforeDown1,downAction,onDown,whenDown,onIdle,setTimeout,upAction,onUp,whenup2,beforeDown1,downAction,onDown,onIdle,whenDownTimeout'
     const state = new State()
 //    .setLogLevel1()
     state.setUpAction((next) => {
