@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/FlowFuse/ffcn-kafka/compare/v1.0.3...v1.0.4) (2026-10-16)
+
+
+### Bug Fixes
+
+* Route keyed messages by key across partitions ([#65](https://github.com/FlowFuse/ffcn-kafka/issues/65)) ([bffb4ba](https://github.com/FlowFuse/ffcn-kafka/commit/bffb4ba02807d9abfdd1a445d3790dd85aa6f649))
+
 ## [1.0.3](https://github.com/FlowFuse/ffcn-kafka/compare/v1.0.2...v1.0.3) (2026-10-13)
 
 
