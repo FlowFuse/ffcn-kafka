@@ -9,6 +9,9 @@ const nodeStatus = require('./nodeStatus.js')
 const zlib = require('node:zlib')
 const compressionTool = require('compressiontool')
 const noderedBase=require("node-red-contrib-noderedbase");
+const murmur2Partitioner = require('./murmur2Partitioner.js')
+
+const isTrue = (value) => value === true || value === 'true'
 
 function showStatus (statusText, statusfill) {
   this.statusText = statusText
@@ -160,22 +163,29 @@ function getTopicNodeDefault (msg) {
 }
 function getTopicNode () { return this.topic || '' }
 function convert2KafkaMsgOveride (msg, msgData) {
-  return {
+  const kafkaMsg = {
     topic: this.getTopic(msg),
     messages: [msgData],
     key: msg.key || this.getKey(msg),
-    partition: msg.partition || this.partition || 0,
     attributes: msg.attributes || this.attributes || 0
   }
+  if (msg.partition != null) {
+    kafkaMsg.partition = msg.partition
+  } else if (this.options.partitionerType === 0) {
+    kafkaMsg.partition = this.partition || 0
+  }
+  return kafkaMsg
 }
 function convert2KafkaMsgNoOveride (msg, msgData) {
-  return {
+  const kafkaMsg = {
     topic: this.getTopic(msg),
     messages: [msgData],
     key: this.getKey(msg),
-    partition: this.partition || 0,
     attributes: this.attributes || 0
   }
+  // kafka-node only asks the partitioner when no partition is set
+  if (this.options.partitionerType === 0) kafkaMsg.partition = this.partition || 0
+  return kafkaMsg
 }
 function processMessageNoCompression (msg, msgData) {
   logger.active&&logger.send({ label: 'processMessageNoCompression', msg: msg })
@@ -220,23 +230,23 @@ module.exports = function (RED) {
         deadletters: 0,
         errorDiscarded: 0,
         messageCount: 0,
-        convert2Kafka: (this.msgOveride === true ? convert2KafkaMsgOveride.bind(this) : convert2KafkaMsgNoOveride.bind(this)),
+        convert2Kafka: (isTrue(n.msgOveride) ? convert2KafkaMsgOveride.bind(this) : convert2KafkaMsgNoOveride.bind(this)),
         processMessageCompression: processMessageCompression.bind(this),
         processMessageNoCompression: processMessageNoCompression.bind(this),
-        getTopic: (this.msgTopicOveride === true ? getTopicNodeDefault.bind(this) : getTopicNode).bind(this),
+        getTopic: (isTrue(n.msgTopicOveride) ? getTopicNodeDefault.bind(this) : getTopicNode).bind(this),
         retryCount: 0,
-        sendDeadletter: (this.topicDeadletter ? sendDeadletterNewOK.bind(this) : sendDeadletterNotOK.bind(this)),
+        sendDeadletter: (n.topicDeadletter ? sendDeadletterNewOK.bind(this) : sendDeadletterNotOK.bind(this)),
         sendDeadletterError: sendDeadletterError.bind(this),
         sendKafka: sendKafka.bind(this),
         showStatus: showStatus.bind(this),
         successes: 0,
         options: {
           // Configuration for when to consider a message as acknowledged, default 1
-          requireAcks: this.requireAcks || 1,
+          requireAcks: Number(n.requireAcks) || 1,
           // time in milliseconds to wait for all acks before considered, default 100ms
-          ackTimeoutMs: this.ackTimeoutMs || 100,
+          ackTimeoutMs: Number(n.ackTimeoutMs) || 100,
           // Partitioner type (default = 0, random = 1, cyclic = 2, keyed = 3, custom = 4), default 0
-          partitionerType: this.partitionerType || 0
+          partitionerType: Number(n.partitionerType) || 0
         }
       })
       node._base=new noderedBase(RED,node);
@@ -299,7 +309,9 @@ module.exports = function (RED) {
           logger.active&&logger.info({ label: 'upAction', node: node.id, name: node.name })
           node.status({ fill: 'yellow', shape: 'ring', text: 'connecting' })
           const kafka = node.brokerNode.getKafkaDriver()
-          node.producer = new kafka[(node.connectionType || 'Producer')](client.connection, node.options)
+          node.producer = node.options.partitionerType === 3
+            ? new kafka[(node.connectionType || 'Producer')](client.connection, { ...node.options, partitionerType: 4 }, murmur2Partitioner)
+            : new kafka[(node.connectionType || 'Producer')](client.connection, node.options)
           node.producer.on('error', function (ex) {
             const errMsg = node.brokerNode.getRevisedMessage(ex.message)
             logger.error({ label: 'producer.on.error', node: node.id, name: node.name, error: ex.message, errorEnhanced: errMsg })
