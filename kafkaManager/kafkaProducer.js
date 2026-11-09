@@ -49,9 +49,11 @@ function sendKafka (msg, done) {
 attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
 
+  const payloads = Array.isArray(msg) ? msg : [msg]
+
   const _this = this
   logger.active&&logger.send({ label: 'sendKafka', node: _this.id, msg: sendMsgToString, doneProvide: done != null })
-  _this.producer.send([msg], (err, data) => {
+  _this.producer.send(payloads, (err, data) => {
     if (err) {
       logger.error({ label: 'send', node: _this.id, error: err })
       const errmsg = (typeof err === 'string' ? err : err.message)
@@ -236,17 +238,17 @@ function queueMessage(msg, msgData, _this = this) {
 }
 
 function processQueuedMessages (queue, _this) {
-  const messages = queue.map(p => p.msgData)
-  const  msg = queue[0].msg
-  const kafkaMsg = {
-    topic: _this.getTopic(msg),
-    messages,
-    key: _this.getKey(msg),
-    attributes: _this.attributes || 0
-  }
+  const messages = queue.map(p => {
+    return {
+      topic: _this.getTopic(p.msg),
+      messages: p.msgData,
+      key: _this.getKey(p.msg),
+      attributes: _this.attributes || 0
+    }
+  })
   _this.batchQueue = []
   try {
-    _this.whenUp(_this.sendKafka, kafkaMsg)
+    _this.whenUp(_this.sendKafka, messages)
   } catch (ex) {
     logger.active&&logger.sendErrorAndStackDump(ex.message, ex)
     _this.error('input error:' + ex.message, msg)
