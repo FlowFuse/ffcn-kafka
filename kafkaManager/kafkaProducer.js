@@ -219,6 +219,40 @@ function processMessageCompression (msg, msgData, _this = this) {
   )
 }
 
+function queueMessage(msg, msgData, _this = this) {
+  _this.batchQueue.push({
+    msg, msgData
+  })
+  if (_this.batchQueue.length === 1) {
+    // start timer
+    _this.batchTimer = setTimeout(()=>{
+      processQueuedMessages(_this.batchQueue, _this)
+    }, this.batchTime)
+  }
+  if (_this.batchQueue.length >= this.batchSize) {
+    clearTimeout(_this.batchTimer)
+    processQueuedMessages(_this.batchQueue, _this)
+  }
+}
+
+function processQueuedMessages (queue, _this) {
+  const messages = queue.map(p => p.msgData)
+  const  msg = queue[0].msg
+  const kafkaMsg = {
+    topic: _this.getTopic(msg),
+    messages,
+    key: _this.getKey(msg),
+    attributes: _this.attributes || 0
+  }
+  _this.batchQueue = []
+  try {
+    _this.whenUp(_this.sendKafka, kafkaMsg)
+  } catch (ex) {
+    logger.active&&logger.sendErrorAndStackDump(ex.message, ex)
+    _this.error('input error:' + ex.message, msg)
+  }
+}
+
 module.exports = function (RED) {
   function KafkaProducerNode (n) {
     RED.nodes.createNode(this, n)
@@ -247,7 +281,12 @@ module.exports = function (RED) {
           ackTimeoutMs: Number(n.ackTimeoutMs) || 100,
           // Partitioner type (default = 0, random = 1, cyclic = 2, keyed = 3, custom = 4), default 0
           partitionerType: Number(n.partitionerType) || 0
-        }
+        },
+        batchMessages: n.batchMessages || false,
+        queueMessage: queueMessage.bind(this),
+        batchQueue: [],
+        batchTime: n.batchTime || 250,
+        batchSize: n.batchSize || 2
       })
       node._base=new noderedBase(RED,node);
       this._base.setSource("payload")
@@ -401,6 +440,10 @@ module.exports = function (RED) {
       logger.active&&logger.send({ label: 'kafkaProducer', node: node.id, getKey: node.getKey.toString() })
       node.on('input', function (msg) {
         node.messageCount++
+        if (node.batchMessages) {
+          node.queueMessage(msg, node.getMessage(RED, node, msg))
+          return
+        }
         try {
           node.processMessage(msg, node.getMessage(RED, node, msg))
         } catch (ex) {
