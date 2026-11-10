@@ -239,12 +239,7 @@ function queueMessage(msg, msgData, _this = this) {
 
 function processQueuedMessages (queue, _this) {
   const messages = queue.map(p => {
-    return {
-      topic: _this.getTopic(p.msg),
-      messages: p.msgData,
-      key: _this.getKey(p.msg),
-      attributes: _this.attributes || 0
-    }
+    return _this.convert2Kafka(p.msg, p.msgData)
   })
   _this.batchQueue = []
   try {
