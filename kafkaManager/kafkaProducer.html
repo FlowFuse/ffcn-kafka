@@ -99,6 +99,19 @@
         <label for="node-input-topicDeadletter"><i class="fa fa-tag"></i> Deadletter Topic </label>
         <input type="text" id="node-input-topicDeadletter" placeholder="topicDeadletter">
     </div>
+    <div class="form-row">
+        <label for="node-input-batchMessages"><i class="fa fa-list-ul"></i> </label>
+        <input type="checkbox" id="node-input-batchMessages" style="width: auto"></input> Batch Messages
+    </div>
+    <div class="form-row">
+        <label for="node-input-batchSize"><i class="fa fa-tag"></i> Batch Size </label>
+        <input type="number" id="node-input-batchSize" placeholder="2">
+    </div>
+    <div class="form-row">
+        <label for="node-input-batchTime"><i class="fa fa-tag"></i> Batch Time (ms) </label>
+        <input type="number" id="node-input-batchTime" placeholder="250">
+    </div>
+    
 </script>
 
 <script type="text/javascript">
@@ -151,7 +164,10 @@ function json2html(obj){
             connectionType: {value:"Producer",required:true},
             convertFromJson: {value: false, required: true},
             nodeQSize:{value:1000, required:false},
-			compressionType: {value:"none"}
+			compressionType: {value:"none"},
+            batchMessages: {value: false},
+            batchSize: {value: 1},
+            batchTime: {value: 250}
         },
 	    inputs:1,
         inputLabels: "",
@@ -213,6 +229,13 @@ function json2html(obj){
         			{ value: "setFlate", label: "Deflate"}
     			]
 			}]});
+            $("#node-input-batchSize").prop('disabled', !node.batchMessages);
+            $("#node-input-batchTime").prop('disabled', !node.batchMessages);
+            $("#node-input-batchMessages").change(function () {
+                node.batchMessages = this.checked
+                $("#node-input-batchSize").prop('disabled', !this.checked);
+                $("#node-input-batchTime").prop('disabled', !this.checked);
+            });
         },
         oneditsave: function() {
         },

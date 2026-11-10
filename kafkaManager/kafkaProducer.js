@@ -49,9 +49,11 @@ function sendKafka (msg, done) {
 attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
 
+  const payloads = Array.isArray(msg) ? msg : [msg]
+
   const _this = this
   logger.active&&logger.send({ label: 'sendKafka', node: _this.id, msg: sendMsgToString, doneProvide: done != null })
-  _this.producer.send([msg], (err, data) => {
+  _this.producer.send(payloads, (err, data) => {
     if (err) {
       logger.error({ label: 'send', node: _this.id, error: err })
       const errmsg = (typeof err === 'string' ? err : err.message)
@@ -219,6 +221,40 @@ function processMessageCompression (msg, msgData, _this = this) {
   )
 }
 
+function queueMessage(msg, msgData, _this = this) {
+  _this.batchQueue.push({
+    msg, msgData
+  })
+  if (_this.batchQueue.length === 1) {
+    // start timer
+    _this.batchTimer = setTimeout(()=>{
+      processQueuedMessages(_this.batchQueue, _this)
+    }, this.batchTime)
+  }
+  if (_this.batchQueue.length >= this.batchSize) {
+    clearTimeout(_this.batchTimer)
+    processQueuedMessages(_this.batchQueue, _this)
+  }
+}
+
+function processQueuedMessages (queue, _this) {
+  const messages = queue.map(p => {
+    return {
+      topic: _this.getTopic(p.msg),
+      messages: p.msgData,
+      key: _this.getKey(p.msg),
+      attributes: _this.attributes || 0
+    }
+  })
+  _this.batchQueue = []
+  try {
+    _this.whenUp(_this.sendKafka, messages)
+  } catch (ex) {
+    logger.active&&logger.sendErrorAndStackDump(ex.message, ex)
+    _this.error('input error:' + ex.message, msg)
+  }
+}
+
 module.exports = function (RED) {
   function KafkaProducerNode (n) {
     RED.nodes.createNode(this, n)
@@ -247,7 +283,12 @@ module.exports = function (RED) {
           ackTimeoutMs: Number(n.ackTimeoutMs) || 100,
           // Partitioner type (default = 0, random = 1, cyclic = 2, keyed = 3, custom = 4), default 0
           partitionerType: Number(n.partitionerType) || 0
-        }
+        },
+        batchMessages: n.batchMessages || false,
+        queueMessage: queueMessage.bind(this),
+        batchQueue: [],
+        batchTime: n.batchTime || 250,
+        batchSize: n.batchSize || 2
       })
       node._base=new noderedBase(RED,node);
       this._base.setSource("payload")
@@ -401,6 +442,10 @@ module.exports = function (RED) {
       logger.active&&logger.send({ label: 'kafkaProducer', node: node.id, getKey: node.getKey.toString() })
       node.on('input', function (msg) {
         node.messageCount++
+        if (node.batchMessages) {
+          node.queueMessage(msg, node.getMessage(RED, node, msg))
+          return
+        }
         try {
           node.processMessage(msg, node.getMessage(RED, node, msg))
         } catch (ex) {
