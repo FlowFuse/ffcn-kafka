@@ -140,7 +140,7 @@ function sendDeadletterNewOK (msg, _this = this) {
         (err, data) => {
           if (err) {
             logger.error({ label: 'deadletter.producer.send', error: err, deadletterTopic: _this.deadletterTopic })
-            _this.sendDeadletterError.apppy(_this, [msg, err])
+            _this.sendDeadletterError.apply(_this, [msg, err])
           } else {
             _this.deadletters++
           }
@@ -239,7 +239,22 @@ function queueMessage(msg, msgData, _this = this) {
 
 function processQueuedMessages (queue, _this) {
   const messages = queue.map(p => {
+    // if (_this.compressor) {
+      // console.log('Compressed messages')
+      // if (typeof p.msgData !== 'string') {
+      //   if (!(msgData instanceof Buffer || msgData instanceof Uint8Array)) {
+      //     return _this.convert2Kafka(p.msg, p.msgData)
+      //   }
+      // }
+      // _this.compressor.compress(p.msgData, (compressed) => {
+      //   // how to return the compresses data from the map call
+      // }, 
+      // () => {
+      //   //error handler
+      // })
+    // } else {
     return _this.convert2Kafka(p.msg, p.msgData)
+    // }
   })
   _this.batchQueue = []
   try {
