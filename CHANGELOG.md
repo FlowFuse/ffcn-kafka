@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/FlowFuse/ffcn-kafka/compare/v1.0.4...v1.1.0) (2026-11-25)
+
+
+### Features
+
+* Batch messages ([#82](https://github.com/FlowFuse/ffcn-kafka/issues/82)) ([9dd3a42](https://github.com/FlowFuse/ffcn-kafka/commit/9dd3a426b02fe85336ca55c935f9cd6b287607d4))
+
 ## [1.0.4](https://github.com/FlowFuse/ffcn-kafka/compare/v1.0.3...v1.0.4) (2026-10-16)
 
 
