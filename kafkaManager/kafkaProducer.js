@@ -50,6 +50,7 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
 
   const payloads = Array.isArray(msg) ? msg : [msg]
+  const topics = [...new Set(payloads.map(p => p.topic))]
 
   const _this = this
   logger.active&&logger.send({ label: 'sendKafka', node: _this.id, msg: sendMsgToString, doneProvide: done != null })
@@ -58,7 +59,7 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
       logger.error({ label: 'send', node: _this.id, error: err })
       const errmsg = (typeof err === 'string' ? err : err.message)
       if (errmsg.startsWith('InvalidTopic')) {
-        _this.status({ fill: 'yellow', shape: 'ring', text: 'Invalid topic ' + msg.topic })
+        _this.status({ fill: 'yellow', shape: 'ring', text: 'Invalid topic ' + topics.join(',') })
       } else if (errmsg.startsWith('Broker not available')) {
         try {
           logger.warn("broker down, setting state down")
@@ -69,19 +70,19 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
         done && done(err)
         return
       } else if (errmsg.startsWith('Could not find the leader')) {
-        _this.brokerNode.client.connection.refreshMetadata([msg.topic], (error) => { // bug workaround
+        _this.brokerNode.client.connection.refreshMetadata(topics, (error) => { // bug workaround
           if (error) {
             _this.error('producer.send client.refreshMetadata ' + error)
             _this.showStatus('leader reset issue', 'red')
             done && done(err)
           } else {
             _this.log('refreshMetadata issued')
-            _this.producer.send([msg], (err, data) => {
+            _this.producer.send(payloads, (err, data) => {
               if (err) {
                 _this.error('retry send error ' + err)
-                _this.sendDeadletter(msg, done)
+                payloads.forEach(p => _this.sendDeadletter(p))
               } else {
-                _this.successes++
+                _this.successes += payloads.length
               }
               done && done(err)
             })
@@ -109,9 +110,9 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
         return
       }
-      _this.sendDeadletter(msg, done)
+      payloads.forEach(p => _this.sendDeadletter(p))
     } else {
-      _this.successes++
+      _this.successes += payloads.length
     }
     done && done(err)
   })
@@ -471,10 +472,11 @@ module.exports = function (RED) {
           node.error('input error:' + ex.message, msg)
         }
       })
-      node.on('close', async function (removed, done) {
+      node.on('close', function (removed, done) {
         clearTimeout(node.batchTimer)
         if (node.batchQueue.length > 0) {
-          await processQueuedMessages(node.batchQueue, node)
+          node.warn('dropped ' + node.batchQueue.length + ' batched message(s) on close')
+          node.batchQueue = []
         }
         node.setDown()
         done()
