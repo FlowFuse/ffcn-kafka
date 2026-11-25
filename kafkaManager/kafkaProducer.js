@@ -49,14 +49,17 @@ function sendKafka (msg, done) {
 attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
 
+  const payloads = Array.isArray(msg) ? msg : [msg]
+  const topics = [...new Set(payloads.map(p => p.topic))]
+
   const _this = this
   logger.active&&logger.send({ label: 'sendKafka', node: _this.id, msg: sendMsgToString, doneProvide: done != null })
-  _this.producer.send([msg], (err, data) => {
+  _this.producer.send(payloads, (err, data) => {
     if (err) {
       logger.error({ label: 'send', node: _this.id, error: err })
       const errmsg = (typeof err === 'string' ? err : err.message)
       if (errmsg.startsWith('InvalidTopic')) {
-        _this.status({ fill: 'yellow', shape: 'ring', text: 'Invalid topic ' + msg.topic })
+        _this.status({ fill: 'yellow', shape: 'ring', text: 'Invalid topic ' + topics.join(',') })
       } else if (errmsg.startsWith('Broker not available')) {
         try {
           logger.warn("broker down, setting state down")
@@ -67,19 +70,19 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
         done && done(err)
         return
       } else if (errmsg.startsWith('Could not find the leader')) {
-        _this.brokerNode.client.connection.refreshMetadata([msg.topic], (error) => { // bug workaround
+        _this.brokerNode.client.connection.refreshMetadata(topics, (error) => { // bug workaround
           if (error) {
             _this.error('producer.send client.refreshMetadata ' + error)
             _this.showStatus('leader reset issue', 'red')
             done && done(err)
           } else {
             _this.log('refreshMetadata issued')
-            _this.producer.send([msg], (err, data) => {
+            _this.producer.send(payloads, (err, data) => {
               if (err) {
                 _this.error('retry send error ' + err)
-                _this.sendDeadletter(msg, done)
+                payloads.forEach(p => _this.sendDeadletter(p))
               } else {
-                _this.successes++
+                _this.successes += payloads.length
               }
               done && done(err)
             })
@@ -107,9 +110,9 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
         return
       }
-      _this.sendDeadletter(msg, done)
+      payloads.forEach(p => _this.sendDeadletter(p))
     } else {
-      _this.successes++
+      _this.successes += payloads.length
     }
     done && done(err)
   })
@@ -138,7 +141,7 @@ function sendDeadletterNewOK (msg, _this = this) {
         (err, data) => {
           if (err) {
             logger.error({ label: 'deadletter.producer.send', error: err, deadletterTopic: _this.deadletterTopic })
-            _this.sendDeadletterError.apppy(_this, [msg, err])
+            _this.sendDeadletterError.apply(_this, [msg, err])
           } else {
             _this.deadletters++
           }
@@ -219,6 +222,58 @@ function processMessageCompression (msg, msgData, _this = this) {
   )
 }
 
+async function queueMessage(msg, msgData, _this = this) {
+  _this.batchQueue.push({
+    msg, msgData
+  })
+  if (_this.batchQueue.length === 1) {
+    // start timer
+    _this.batchTimer = setTimeout(async ()=>{
+      await processQueuedMessages(_this.batchQueue, _this)
+    }, this.batchTime)
+  }
+  if (_this.batchQueue.length >= this.batchSize) {
+    clearTimeout(_this.batchTimer)
+    await processQueuedMessages(_this.batchQueue, _this)
+  }
+}
+
+function compressPayload (msgData, _this) {
+  const compressible = typeof msgData === 'string' || msgData instanceof Buffer || msgData instanceof Uint8Array
+  if (!_this.compressor || !compressible) return Promise.resolve(msgData)
+  return new Promise((resolve) => {
+    _this.compressor.compress(msgData, resolve, () => {
+      if ((_this.compressionError++) === 1) {
+        _this.warn('compression failure(s)')
+      }
+      resolve(msgData)
+    })
+  })
+}
+
+async function processQueuedMessages (queue, _this) {
+  clearTimeout(_this.batchTimer)
+  _this.batchQueue = []
+  try {
+    const payloads = await Promise.all(queue.map(p => compressPayload(p.msgData, _this)))
+    const messages = []
+    queue.forEach((p, i) => {
+      try {
+        messages.push(_this.convert2Kafka(p.msg, payloads[i]))
+      } catch (ex) {
+        logger.active && logger.sendErrorAndStackDump(ex.message, ex)
+        _this.error('input error:' + ex.message, p.msg)
+      }
+    })
+    if (messages.length > 0) {
+      _this.whenUp(_this.sendKafka, messages)
+    }
+  } catch (ex) {
+    logger.active && logger.sendErrorAndStackDump(ex.message, ex)
+    _this.error('batch error:' + ex.message)
+  }
+}
+
 module.exports = function (RED) {
   function KafkaProducerNode (n) {
     RED.nodes.createNode(this, n)
@@ -247,7 +302,12 @@ module.exports = function (RED) {
           ackTimeoutMs: Number(n.ackTimeoutMs) || 100,
           // Partitioner type (default = 0, random = 1, cyclic = 2, keyed = 3, custom = 4), default 0
           partitionerType: Number(n.partitionerType) || 0
-        }
+        },
+        batchMessages: n.batchMessages || false,
+        queueMessage: queueMessage.bind(this),
+        batchQueue: [],
+        batchTime: Number(n.batchTime) || 250,
+        batchSize: Number(n.batchSize) || 100
       })
       node._base=new noderedBase(RED,node);
       this._base.setSource("payload")
@@ -399,8 +459,12 @@ module.exports = function (RED) {
         }
       }
       logger.active&&logger.send({ label: 'kafkaProducer', node: node.id, getKey: node.getKey.toString() })
-      node.on('input', function (msg) {
+      node.on('input', async function (msg) {
         node.messageCount++
+        if (node.batchMessages) {
+          await node.queueMessage(msg, node.getMessage(RED, node, msg))
+          return
+        }
         try {
           node.processMessage(msg, node.getMessage(RED, node, msg))
         } catch (ex) {
@@ -409,6 +473,11 @@ module.exports = function (RED) {
         }
       })
       node.on('close', function (removed, done) {
+        clearTimeout(node.batchTimer)
+        if (node.batchQueue.length > 0) {
+          node.warn('dropped ' + node.batchQueue.length + ' batched message(s) on close')
+          node.batchQueue = []
+        }
         node.setDown()
         done()
       })
