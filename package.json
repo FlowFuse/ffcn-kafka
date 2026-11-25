@@ -1,11 +1,11 @@
 {
   "name": "@flowfuse-certified-nodes/ffcn-kafka",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "homepage": "https://flowfuse.com/node-red/flowfuse/hub/kafka/",
   "publishConfig": {
     "registry": "https://registry.flowfuse.com"
   },
-  "description": "Node-RED implements Kafka manager with associand associated .",
+  "description": "Apache Kafka client for Node-RED: produce, consume, and manage topics.",
   "dependencies": {
     "compressiontool": "^0.1.3",
     "kafka-node": "^5.0.0",
@@ -16,10 +16,10 @@
     "snappy": "^6.0.1"
   },
   "devDependencies": {
-    "bcrypt": ">=5.0.0",
-    "bl": ">=2.2.1",
-    "mocha": "^9.2.0",
-    "node-red": "^5.0.4",
+    "bcrypt": ">=6.0.0",
+    "bl": ">=7.0.18",
+    "mocha": "^12.0.3",
+    "node-red": "^5.0.10",
     "node-red-node-test-helper": "~0.3.6",
     "zlib": "^1.0.5"
   },

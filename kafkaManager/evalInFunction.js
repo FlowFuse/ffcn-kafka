@@ -15,19 +15,19 @@ function evalInFunction (node, propertyName) {
     const propertyType = propertyName + '-type'
     switch (node[propertyType]) {
       case 'str':
-        return evalFunction(propertyName, '()=>' + JSON.stringify(node.property))
+        return evalFunction(propertyName, '()=>' + JSON.stringify(property))
       case 'num':
       case 'json':
         return evalFunction(propertyName, '()=>' + property)
       case 'node':
-        return evalFunction(propertyName, '()=>nodeContext.get(' + property + ')')
+        return evalFunction(propertyName, '()=>nodeContext.get(\'' + property + '\')')
       case 'flow':
         if (flow) throw Error("context store may be memoryonly so flow doesn't work")
-        return evalFunction(propertyName, '()=>flow.get(' + property + ')')
+        return evalFunction(propertyName, '()=>flow.get(\'' + property + '\')')
       case 'global':
-        return evalFunction(propertyName, '()=>global.get(' + property + ')')
+        return evalFunction(propertyName, '()=>global.get(\'' + property + '\')')
       case 'env':
-        return evalFunction(propertyName, '()=>process.env[' + property + ']')
+        return evalFunction(propertyName, '()=>process.env[\'' + property + '\']')
       case 'msg':
         return evalFunction(propertyName, '(msg)=>msg.' + property + '||undefined')
       default:

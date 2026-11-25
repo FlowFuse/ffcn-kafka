@@ -9,6 +9,9 @@ const nodeStatus = require('./nodeStatus.js')
 const zlib = require('node:zlib')
 const compressionTool = require('compressiontool')
 const noderedBase=require("node-red-contrib-noderedbase");
+const murmur2Partitioner = require('./murmur2Partitioner.js')
+
+const isTrue = (value) => value === true || value === 'true'
 
 function showStatus (statusText, statusfill) {
   this.statusText = statusText
@@ -46,14 +49,17 @@ function sendKafka (msg, done) {
 attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
 
+  const payloads = Array.isArray(msg) ? msg : [msg]
+  const topics = [...new Set(payloads.map(p => p.topic))]
+
   const _this = this
   logger.active&&logger.send({ label: 'sendKafka', node: _this.id, msg: sendMsgToString, doneProvide: done != null })
-  _this.producer.send([msg], (err, data) => {
+  _this.producer.send(payloads, (err, data) => {
     if (err) {
       logger.error({ label: 'send', node: _this.id, error: err })
       const errmsg = (typeof err === 'string' ? err : err.message)
       if (errmsg.startsWith('InvalidTopic')) {
-        _this.status({ fill: 'yellow', shape: 'ring', text: 'Invalid topic ' + msg.topic })
+        _this.status({ fill: 'yellow', shape: 'ring', text: 'Invalid topic ' + topics.join(',') })
       } else if (errmsg.startsWith('Broker not available')) {
         try {
           logger.warn("broker down, setting state down")
@@ -64,19 +70,19 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
         done && done(err)
         return
       } else if (errmsg.startsWith('Could not find the leader')) {
-        _this.brokerNode.client.connection.refreshMetadata([msg.topic], (error) => { // bug workaround
+        _this.brokerNode.client.connection.refreshMetadata(topics, (error) => { // bug workaround
           if (error) {
             _this.error('producer.send client.refreshMetadata ' + error)
             _this.showStatus('leader reset issue', 'red')
             done && done(err)
           } else {
             _this.log('refreshMetadata issued')
-            _this.producer.send([msg], (err, data) => {
+            _this.producer.send(payloads, (err, data) => {
               if (err) {
                 _this.error('retry send error ' + err)
-                _this.sendDeadletter(msg, done)
+                payloads.forEach(p => _this.sendDeadletter(p))
               } else {
-                _this.successes++
+                _this.successes += payloads.length
               }
               done && done(err)
             })
@@ -104,9 +110,9 @@ attributes: 0: No compression, 1: Compress using GZip, 2: Compress using snappy
 */
         return
       }
-      _this.sendDeadletter(msg, done)
+      payloads.forEach(p => _this.sendDeadletter(p))
     } else {
-      _this.successes++
+      _this.successes += payloads.length
     }
     done && done(err)
   })
@@ -135,7 +141,7 @@ function sendDeadletterNewOK (msg, _this = this) {
         (err, data) => {
           if (err) {
             logger.error({ label: 'deadletter.producer.send', error: err, deadletterTopic: _this.deadletterTopic })
-            _this.sendDeadletterError.apppy(_this, [msg, err])
+            _this.sendDeadletterError.apply(_this, [msg, err])
           } else {
             _this.deadletters++
           }
@@ -160,22 +166,29 @@ function getTopicNodeDefault (msg) {
 }
 function getTopicNode () { return this.topic || '' }
 function convert2KafkaMsgOveride (msg, msgData) {
-  return {
+  const kafkaMsg = {
     topic: this.getTopic(msg),
     messages: [msgData],
     key: msg.key || this.getKey(msg),
-    partition: msg.partition || this.partition || 0,
     attributes: msg.attributes || this.attributes || 0
   }
+  if (msg.partition != null) {
+    kafkaMsg.partition = msg.partition
+  } else if (this.options.partitionerType === 0) {
+    kafkaMsg.partition = this.partition || 0
+  }
+  return kafkaMsg
 }
 function convert2KafkaMsgNoOveride (msg, msgData) {
-  return {
+  const kafkaMsg = {
     topic: this.getTopic(msg),
     messages: [msgData],
     key: this.getKey(msg),
-    partition: this.partition || 0,
     attributes: this.attributes || 0
   }
+  // kafka-node only asks the partitioner when no partition is set
+  if (this.options.partitionerType === 0) kafkaMsg.partition = this.partition || 0
+  return kafkaMsg
 }
 function processMessageNoCompression (msg, msgData) {
   logger.active&&logger.send({ label: 'processMessageNoCompression', msg: msg })
@@ -209,6 +222,58 @@ function processMessageCompression (msg, msgData, _this = this) {
   )
 }
 
+async function queueMessage(msg, msgData, _this = this) {
+  _this.batchQueue.push({
+    msg, msgData
+  })
+  if (_this.batchQueue.length === 1) {
+    // start timer
+    _this.batchTimer = setTimeout(async ()=>{
+      await processQueuedMessages(_this.batchQueue, _this)
+    }, this.batchTime)
+  }
+  if (_this.batchQueue.length >= this.batchSize) {
+    clearTimeout(_this.batchTimer)
+    await processQueuedMessages(_this.batchQueue, _this)
+  }
+}
+
+function compressPayload (msgData, _this) {
+  const compressible = typeof msgData === 'string' || msgData instanceof Buffer || msgData instanceof Uint8Array
+  if (!_this.compressor || !compressible) return Promise.resolve(msgData)
+  return new Promise((resolve) => {
+    _this.compressor.compress(msgData, resolve, () => {
+      if ((_this.compressionError++) === 1) {
+        _this.warn('compression failure(s)')
+      }
+      resolve(msgData)
+    })
+  })
+}
+
+async function processQueuedMessages (queue, _this) {
+  clearTimeout(_this.batchTimer)
+  _this.batchQueue = []
+  try {
+    const payloads = await Promise.all(queue.map(p => compressPayload(p.msgData, _this)))
+    const messages = []
+    queue.forEach((p, i) => {
+      try {
+        messages.push(_this.convert2Kafka(p.msg, payloads[i]))
+      } catch (ex) {
+        logger.active && logger.sendErrorAndStackDump(ex.message, ex)
+        _this.error('input error:' + ex.message, p.msg)
+      }
+    })
+    if (messages.length > 0) {
+      _this.whenUp(_this.sendKafka, messages)
+    }
+  } catch (ex) {
+    logger.active && logger.sendErrorAndStackDump(ex.message, ex)
+    _this.error('batch error:' + ex.message)
+  }
+}
+
 module.exports = function (RED) {
   function KafkaProducerNode (n) {
     RED.nodes.createNode(this, n)
@@ -220,27 +285,33 @@ module.exports = function (RED) {
         deadletters: 0,
         errorDiscarded: 0,
         messageCount: 0,
-        convert2Kafka: (this.msgOveride === true ? convert2KafkaMsgOveride.bind(this) : convert2KafkaMsgNoOveride.bind(this)),
+        convert2Kafka: (isTrue(n.msgOveride) ? convert2KafkaMsgOveride.bind(this) : convert2KafkaMsgNoOveride.bind(this)),
         processMessageCompression: processMessageCompression.bind(this),
         processMessageNoCompression: processMessageNoCompression.bind(this),
-        getTopic: (this.msgTopicOveride === true ? getTopicNodeDefault.bind(this) : getTopicNode).bind(this),
+        getTopic: (isTrue(n.msgTopicOveride) ? getTopicNodeDefault.bind(this) : getTopicNode).bind(this),
         retryCount: 0,
-        sendDeadletter: (this.topicDeadletter ? sendDeadletterNewOK.bind(this) : sendDeadletterNotOK.bind(this)),
+        sendDeadletter: (n.topicDeadletter ? sendDeadletterNewOK.bind(this) : sendDeadletterNotOK.bind(this)),
         sendDeadletterError: sendDeadletterError.bind(this),
         sendKafka: sendKafka.bind(this),
         showStatus: showStatus.bind(this),
         successes: 0,
         options: {
           // Configuration for when to consider a message as acknowledged, default 1
-          requireAcks: this.requireAcks || 1,
+          requireAcks: Number(n.requireAcks) || 1,
           // time in milliseconds to wait for all acks before considered, default 100ms
-          ackTimeoutMs: this.ackTimeoutMs || 100,
+          ackTimeoutMs: Number(n.ackTimeoutMs) || 100,
           // Partitioner type (default = 0, random = 1, cyclic = 2, keyed = 3, custom = 4), default 0
-          partitionerType: this.partitionerType || 0
-        }
+          partitionerType: Number(n.partitionerType) || 0
+        },
+        batchMessages: n.batchMessages || false,
+        queueMessage: queueMessage.bind(this),
+        batchQueue: [],
+        batchTime: Number(n.batchTime) || 250,
+        batchSize: Number(n.batchSize) || 100
       })
       node._base=new noderedBase(RED,node);
       this._base.setSource("payload")
+      node['key-type'] = n.keyType
 
       node.brokerNode = RED.nodes.getNode(this.broker)
       if (!node.brokerNode) throw Error('Broker not found ' + node.broker)
@@ -298,7 +369,9 @@ module.exports = function (RED) {
           logger.active&&logger.info({ label: 'upAction', node: node.id, name: node.name })
           node.status({ fill: 'yellow', shape: 'ring', text: 'connecting' })
           const kafka = node.brokerNode.getKafkaDriver()
-          node.producer = new kafka[(node.connectionType || 'Producer')](client.connection, node.options)
+          node.producer = node.options.partitionerType === 3
+            ? new kafka[(node.connectionType || 'Producer')](client.connection, { ...node.options, partitionerType: 4 }, murmur2Partitioner)
+            : new kafka[(node.connectionType || 'Producer')](client.connection, node.options)
           node.producer.on('error', function (ex) {
             const errMsg = node.brokerNode.getRevisedMessage(ex.message)
             logger.error({ label: 'producer.on.error', node: node.id, name: node.name, error: ex.message, errorEnhanced: errMsg })
@@ -386,8 +459,12 @@ module.exports = function (RED) {
         }
       }
       logger.active&&logger.send({ label: 'kafkaProducer', node: node.id, getKey: node.getKey.toString() })
-      node.on('input', function (msg) {
+      node.on('input', async function (msg) {
         node.messageCount++
+        if (node.batchMessages) {
+          await node.queueMessage(msg, node.getMessage(RED, node, msg))
+          return
+        }
         try {
           node.processMessage(msg, node.getMessage(RED, node, msg))
         } catch (ex) {
@@ -396,6 +473,11 @@ module.exports = function (RED) {
         }
       })
       node.on('close', function (removed, done) {
+        clearTimeout(node.batchTimer)
+        if (node.batchQueue.length > 0) {
+          node.warn('dropped ' + node.batchQueue.length + ' batched message(s) on close')
+          node.batchQueue = []
+        }
         node.setDown()
         done()
       })

@@ -236,7 +236,8 @@ module.exports = function (RED) {
           autoConnect: (node.autoConnect || 'true') === 'true',
           idleConnection: node.idleConnection || 5,
           reconnectOnIdle: (node.reconnectOnIdle || 'true') === 'true',
-          maxAsyncRequests: node.maxAsyncRequests || 10
+          maxAsyncRequests: node.maxAsyncRequests || 10,
+          useCredentials: node.useCredentials || false
         }, optionsOrridden)
         logger.active&&logger.send({ label: 'getKafkaClient', usetls: node.usetls, options: options })
         if (node.usetls) {

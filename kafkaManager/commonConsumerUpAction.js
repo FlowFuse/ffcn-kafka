@@ -15,7 +15,7 @@ function commonConsumerUpAction(node,next,errorCallback,logger){
       try {
         if (++node.messageCount === 1 || node.timedout) {
           node.timedout = false
-          node.status({ fill: 'green', shape: 'ring', text:  readyState(node,{connection:'Processing Messages'}) })
+          node.status({ fill: 'green', shape: 'ring', text: 'Processing Message' }) //readyState(node,{connection:'Processing Messages'}) })
           if (message.value == null) return // seems to send an empty on connect in no messages waiting
         } else if (node.messageCount % 100 === 0) node.status({ fill: 'green', shape: 'ring', text: 'processed ' + node.messageCount })
         node.brokerNode.sendMsg(node, message)

@@ -60,12 +60,12 @@
     <div class="form-row">
         <label for="node-input-key"><i class="fa fa-tag"></i> Key </label>
         <input type="text" id="node-input-key" placeholder="key">
-        <input type="hidden" id="node-input-key-type">
+        <input type="hidden" id="node-input-keyType">
     </div>
     <div class="form-row">
-        <label for="node-input-payload"><i class="fa fa-tag"></i> Key </label>
-        <input type="text" id="node-input-payload" placeholder="key">
-        <input type="hidden" id="node-input-payload-type">
+        <label for="node-input-payload"><i class="fa fa-tag"></i> Payload </label>
+        <input type="text" id="node-input-payload" placeholder="Payload">
+        <input type="hidden" id="node-input-payloadType">
     </div>
     <div class="form-row">
         <label for="node-input-partition"><i class="fa fa-tag"></i> Partition </label>
@@ -85,7 +85,7 @@
     </div>
     <div class="form-row">
 		<label for="node-input-convertFromJson"><i class="fa fa-list-ul"></i> </label>
-		<input id="node-input-convertToJson" type="checkbox" style="width: auto"></input> Convert message from JSON 
+		<input id="node-input-convertFromJson" type="checkbox" style="width: auto"></input> Convert message from JSON 
 	</div>
     <div class="form-row">
 		<label for="node-input-topicSlash2dot"><i class="fa fa-list-ul"></i> </label>
@@ -99,6 +99,19 @@
         <label for="node-input-topicDeadletter"><i class="fa fa-tag"></i> Deadletter Topic </label>
         <input type="text" id="node-input-topicDeadletter" placeholder="topicDeadletter">
     </div>
+    <div class="form-row">
+        <label for="node-input-batchMessages"><i class="fa fa-list-ul"></i> </label>
+        <input type="checkbox" id="node-input-batchMessages" style="width: auto"></input> Batch Messages
+    </div>
+    <div class="form-row">
+        <label for="node-input-batchSize"><i class="fa fa-tag"></i> Batch Size </label>
+        <input type="number" id="node-input-batchSize" placeholder="100">
+    </div>
+    <div class="form-row">
+        <label for="node-input-batchTime"><i class="fa fa-tag"></i> Batch Time (ms) </label>
+        <input type="number" id="node-input-batchTime" placeholder="250">
+    </div>
+    
 </script>
 
 <script type="text/javascript">
@@ -142,7 +155,8 @@ function json2html(obj){
             requireAcks: {value:1,required:true},
             ackTimeoutMs: {value:100,required:true},
             partitionerType: {value:0,required:true},
-            key: {required:false},"keyType":{required:false,default:"str"},
+            key: {required:false},
+            keyType:{required:false,default:"str"},
             partition: {value:0,required:true},
             payload: {value:"payload", validate: RED.validators.typedInput("payloadType")},
             payloadType: {value:"msg"},
@@ -150,7 +164,10 @@ function json2html(obj){
             connectionType: {value:"Producer",required:true},
             convertFromJson: {value: false, required: true},
             nodeQSize:{value:1000, required:false},
-			compressionType: {value:"none"}
+			compressionType: {value:"none"},
+            batchMessages: {value: false},
+            batchSize: {value: 100,  validate: RED.validators.number()},
+            batchTime: {value: 250,  validate: RED.validators.number()}
         },
 	    inputs:1,
         inputLabels: "",
@@ -168,16 +185,17 @@ function json2html(obj){
             $("#node-input-payloadType").val(this.payloadType||"msg");
             $("#node-input-payload").typedInput({
                 type:"msg",
-                types:["msg", "flow","global","env","str"],
+                types:["msg","env","str"],
                 typeField: "#node-input-payloadType"
             });
             $("#node-input-msgOveride").typedInput({type:'bool',types:['bool']});
             $("#node-input-msgTopicOveride").typedInput({type:'bool',types:['bool']});
         	if(!this.connectionType) this.connectionType="Producer";
             if(!this.nodeQSize) $("#node-input-nodeQSize").val(1000);
+            $("#node-input-keyType").val(this.keyType||"str");
             $("#node-input-key").typedInput({
                 type:"str",
-                types:["str","msg", "flow","global","env"],
+                types:["str","msg","env"],
                 typeField: "#node-input-keyType"
             })
             if(node.compressionType==null ){
@@ -211,6 +229,13 @@ function json2html(obj){
         			{ value: "setFlate", label: "Deflate"}
     			]
 			}]});
+            $("#node-input-batchSize").prop('disabled', !node.batchMessages);
+            $("#node-input-batchTime").prop('disabled', !node.batchMessages);
+            $("#node-input-batchMessages").change(function () {
+                node.batchMessages = this.checked
+                $("#node-input-batchSize").prop('disabled', !this.checked);
+                $("#node-input-batchTime").prop('disabled', !this.checked);
+            });
         },
         oneditsave: function() {
         },

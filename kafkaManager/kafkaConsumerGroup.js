@@ -46,7 +46,9 @@ module.exports = function (RED) {
             node.down(nextDown=>{
               logger.active&&logger.send({ label: 'downAction down', node: node.id, name: node.name })
               next()
-              nextDown()
+              if (nextDown) {
+                nextDown()
+              }
             })
           })
         })
