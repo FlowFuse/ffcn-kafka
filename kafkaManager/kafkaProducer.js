@@ -306,7 +306,7 @@ module.exports = function (RED) {
         queueMessage: queueMessage.bind(this),
         batchQueue: [],
         batchTime: Number(n.batchTime) || 250,
-        batchSize: Number(n.batchSize) || 2
+        batchSize: Number(n.batchSize) || 100
       })
       node._base=new noderedBase(RED,node);
       this._base.setSource("payload")
