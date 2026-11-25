@@ -458,10 +458,10 @@ module.exports = function (RED) {
         }
       }
       logger.active&&logger.send({ label: 'kafkaProducer', node: node.id, getKey: node.getKey.toString() })
-      node.on('input', function (msg) {
+      node.on('input', async function (msg) {
         node.messageCount++
         if (node.batchMessages) {
-          node.queueMessage(msg, node.getMessage(RED, node, msg))
+          await node.queueMessage(msg, node.getMessage(RED, node, msg))
           return
         }
         try {
