@@ -221,44 +221,52 @@ function processMessageCompression (msg, msgData, _this = this) {
   )
 }
 
-function queueMessage(msg, msgData, _this = this) {
+async function queueMessage(msg, msgData, _this = this) {
   _this.batchQueue.push({
     msg, msgData
   })
   if (_this.batchQueue.length === 1) {
     // start timer
-    _this.batchTimer = setTimeout(()=>{
-      processQueuedMessages(_this.batchQueue, _this)
+    _this.batchTimer = setTimeout(async ()=>{
+      await processQueuedMessages(_this.batchQueue, _this)
     }, this.batchTime)
   }
   if (_this.batchQueue.length >= this.batchSize) {
     clearTimeout(_this.batchTimer)
-    processQueuedMessages(_this.batchQueue, _this)
+    await processQueuedMessages(_this.batchQueue, _this)
   }
 }
 
-function processQueuedMessages (queue, _this) {
-  const messages = queue.map(p => {
-    // if (_this.compressor) {
-      // console.log('Compressed messages')
-      // if (typeof p.msgData !== 'string') {
-      //   if (!(msgData instanceof Buffer || msgData instanceof Uint8Array)) {
-      //     return _this.convert2Kafka(p.msg, p.msgData)
-      //   }
-      // }
-      // _this.compressor.compress(p.msgData, (compressed) => {
-      //   // how to return the compresses data from the map call
-      // }, 
-      // () => {
-      //   //error handler
-      // })
-    // } else {
-    return _this.convert2Kafka(p.msg, p.msgData)
-    // }
+function compressPayload (msgData, _this) {
+  const compressible = typeof msgData === 'string' || msgData instanceof Buffer || msgData instanceof Uint8Array
+  if (!_this.compressor || !compressible) return Promise.resolve(msgData)
+  return new Promise((resolve) => {
+    _this.compressor.compress(msgData, resolve, () => {
+      if ((_this.compressionError++) === 1) {
+        _this.warn('compression failure(s)')
+      }
+      resolve(msgData)
+    })
   })
+}
+
+async function processQueuedMessages (queue, _this) {
+  clearTimeout(_this.batchTimer)
   _this.batchQueue = []
   try {
-    _this.whenUp(_this.sendKafka, messages)
+    const payloads = await Promise.all(queue.map(p => compressPayload(p.msgData, _this)))
+    const messages = []
+    queue.forEach((p, i) => {
+      try {
+        messages.push(_this.convert2Kafka(p.msg, payloads[i]))
+      } catch (ex) {
+        logger.active && logger.sendErrorAndStackDump(ex.message, ex)
+        _this.error('input error:' + ex.message, p.msg)
+      }
+    })
+    if (messages.length > 0) {
+      _this.whenUp(_this.sendKafka, messages)
+    }
   } catch (ex) {
     logger.active&&logger.sendErrorAndStackDump(ex.message, ex)
     _this.error('input error:' + ex.message, msg)
@@ -463,7 +471,11 @@ module.exports = function (RED) {
           node.error('input error:' + ex.message, msg)
         }
       })
-      node.on('close', function (removed, done) {
+      node.on('close', async function (removed, done) {
+        clearTimeout(node.batchTimer)
+        if (node.batchQueue.length > 0) {
+          await processQueuedMessages(node.batchQueue, node)
+        }
         node.setDown()
         done()
       })
