@@ -268,8 +268,8 @@ async function processQueuedMessages (queue, _this) {
       _this.whenUp(_this.sendKafka, messages)
     }
   } catch (ex) {
-    logger.active&&logger.sendErrorAndStackDump(ex.message, ex)
-    _this.error('input error:' + ex.message, msg)
+    logger.active && logger.sendErrorAndStackDump(ex.message, ex)
+    _this.error('batch error:' + ex.message)
   }
 }
 
